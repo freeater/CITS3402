@@ -104,3 +104,7 @@
         98  0.980000             nan
         99  0.990000             nan
        100  1.000000             nan
+
+FEM1D:
+  Normal end of execution.
+
