@@ -108,3 +108,4 @@
 FEM1D:
   Normal end of execution.
 
+time elapsed = 0.0023820000 seconds

@@ -1,6 +1,7 @@
 # include <stdlib.h>
 # include <stdio.h>
 # include <time.h>
+# include<sys/time.h>
 
 int main ( void );
 void assemble ( double adiag[], double aleft[], double arite[], double f[], 
@@ -29,6 +30,8 @@ int main ( void )
 {
 # define NSUB 100
 # define NL 1
+
+
 
   //double adiag[NSUB+1];
   double *adiag;
@@ -65,7 +68,7 @@ int main ( void )
   xquad = (double *)malloc(sizeof(double)*(NSUB));
   double xr;
 
-
+ 
   timestamp ( );
 
   printf ( "\n" );
@@ -81,8 +84,22 @@ int main ( void )
   printf ( "\n" );
   printf ( "  The interval [XL,XR] is broken into NSUB = %d subintervals\n", NSUB );
   printf ( "  Number of basis functions per element is NL = %d\n", NL );
+
+
+/***********************************************
+  Start timing 
+************************************************/
+
+struct timeval start, end;
+gettimeofday(&start, NULL);
+
+/***********************************************
+
+************************************************/
+
 /*
   Initialize the data.
+
 */
   init ( &ibc, &nquad, &ul, &ur, &xl, &xr );
 /*
@@ -109,10 +126,19 @@ int main ( void )
 /*
   Terminate.
 */
+
+  gettimeofday(&end, NULL);
+  double delta = ((end.tv_sec  - start.tv_sec) * 1000000u + end.tv_usec - start.tv_usec) / 1.e6;
+  
   printf ( "\n" );
   printf ( "FEM1D:\n" );
   printf ( "  Normal end of execution.\n" );
+  printf("time elapsed = %12.10f seconds\n",delta);
 
+  FILE *fp, *fopen();
+  fp =fopen("out.txt","a");
+  fprintf(fp,"time elapsed = %12.10f seconds\n",delta);
+  
   printf ( "\n" );
   timestamp ( );
 
@@ -634,3 +660,5 @@ void timestamp ( void )
   return;
 # undef TIME_SIZE
 }
+
+
