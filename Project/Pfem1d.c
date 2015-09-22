@@ -2,6 +2,9 @@
 # include <stdio.h>
 # include <time.h>
 # include<sys/time.h>
+# include <omp.h>
+
+#define NUM_THREADS 4
 
 int main ( void );
 void assemble ( double adiag[], double aleft[], double arite[], double f[], 
@@ -136,7 +139,7 @@ gettimeofday(&start, NULL);
   printf("time elapsed = %12.10f seconds\n",delta);
 
   FILE *fp, *fopen();
-  fp =fopen("originalout.txt","a");
+  fp =fopen("out.txt","a");
   fprintf(fp,"time elapsed = %12.10f seconds\n",delta);
   
   printf ( "\n" );
@@ -175,117 +178,111 @@ void assemble ( double adiag[], double aleft[], double arite[], double f[],
   Zero out the arrays that hold the coefficients of the matrix
   and the right hand side.
 */
-  for ( i = 0; i < nu; i++ )
-  {
-    f[i] = 0.0;
-  }
-  for ( i = 0; i < nu; i++ )
-  {
-    adiag[i] = 0.0;
-  }
-  for ( i = 0; i < nu; i++ )
-  {
-    aleft[i] = 0.0;
-  }
-  for ( i = 0; i < nu; i++ )
-  {
-    arite[i] = 0.0;
-  }
-/*
-  For interval number IE,
-*/
-  for ( ie = 0; ie < nsub; ie++ )
-  {
-    he = h[ie];
-    xleft = xn[node[0+ie*2]];
-    xrite = xn[node[1+ie*2]];
-/*
-  consider each quadrature point IQ,
-*/
-    for ( iq = 0; iq < nquad; iq++ )
+    
+#pragma omp parallel num_threads(NUM_THREADS)
     {
-      xquade = xquad[ie];
-/*
-  and evaluate the integrals associated with the basis functions
-  for the left, and for the right nodes.
-*/
-      for ( il = 1; il <= nl; il++ )
-      {
-        ig = node[il-1+ie*2];
-        iu = indx[ig] - 1;
-
-        if ( 0 <= iu )
-        {
-          phi ( il, xquade, &phii, &phiix, xleft, xrite );
-          f[iu] = f[iu] + he * ff ( xquade ) * phii;
-/*
-  Take care of boundary nodes at which U' was specified.
-*/
-          if ( ig == 0 )
+       
+        #pragma omp for
+        
+          for ( i = 0; i < nu; i++ )
           {
-            x = 0.0;
-            f[iu] = f[iu] - pp ( x ) * ul;
+            f[i] = 0.0;
           }
-          else if ( ig == nsub )
+        #pragma omp for
+          for ( i = 0; i < nu; i++ )
           {
-            x = 1.0;
-            f[iu] = f[iu] + pp ( x ) * ur;
+            adiag[i] = 0.0;
           }
-/*
-  Evaluate the integrals that take a product of the basis
-  function times itself, or times the other basis function
-  that is nonzero in this interval.
-*/
-          for ( jl = 1; jl <= nl; jl++ )
+        #pragma omp for
+          for ( i = 0; i < nu; i++ )
           {
-            jg = node[jl-1+ie*2];
-            ju = indx[jg] - 1;
-
-            phi ( jl, xquade, &phij, &phijx, xleft, xrite );
-
-            aij = he * ( pp ( xquade ) * phiix * phijx 
-                       + qq ( xquade ) * phii  * phij   );
-/*
-  If there is no variable associated with the node, then it's
-  a specified boundary value, so we multiply the coefficient
-  times the specified boundary value and subtract it from the
-  right hand side.
-*/
-            if ( ju < 0 )
-            {
-              if ( jg == 0 )
-              {
-                f[iu] = f[iu] - aij * ul;
-              }
-              else if ( jg == nsub )
-              {               
-                f[iu] = f[iu] - aij * ur;
-              }
-            }
-/*
-  Otherwise, we add the coefficient we've just computed to the
-  diagonal, or left or right entries of row IU of the matrix.
-*/
-            else
-            {
-              if ( iu == ju )
-              {
-                adiag[iu] = adiag[iu] + aij;
-              }
-              else if ( ju < iu )
-              {
-                aleft[iu] = aleft[iu] + aij;
-              }
-              else
-              {
-                arite[iu] = arite[iu] + aij;
-              }
-            }
+            aleft[i] = 0.0;
           }
-        }
-      }
+        #pragma omp for
+          for ( i = 0; i < nu; i++ )
+          {
+            arite[i] = 0.0;
+          }
     }
-  }
+
+//#pragma omp parallel num_threads(NUM_THREADS)
+//    {
+//        #pragma omp for
+
+          for ( ie = 0; ie < nsub; ie++ )
+          {
+            he = h[ie];
+            xleft = xn[node[0+ie*2]];
+            xrite = xn[node[1+ie*2]];
+           
+            for ( iq = 0; iq < nquad; iq++ )
+            {
+              xquade = xquad[ie];
+
+              for ( il = 1; il <= nl; il++ )
+              {
+                ig = node[il-1+ie*2];
+                iu = indx[ig] - 1;
+
+                if ( 0 <= iu )
+                {
+                  phi ( il, xquade, &phii, &phiix, xleft, xrite );
+                  f[iu] = f[iu] + he * ff ( xquade ) * phii;
+
+                  if ( ig == 0 )
+                  {
+                    x = 0.0;
+                    f[iu] = f[iu] - pp ( x ) * ul;
+                  }
+                  else if ( ig == nsub )
+                  {
+                    x = 1.0;
+                    f[iu] = f[iu] + pp ( x ) * ur;
+                  }
+
+                  for ( jl = 1; jl <= nl; jl++ )
+                  {
+                    jg = node[jl-1+ie*2];
+                    ju = indx[jg] - 1;
+
+                    phi ( jl, xquade, &phij, &phijx, xleft, xrite );
+
+                    aij = he * ( pp ( xquade ) * phiix * phijx 
+                               + qq ( xquade ) * phii  * phij   );
+
+                    if ( ju < 0 )
+                    {
+                      if ( jg == 0 )
+                      {
+                        f[iu] = f[iu] - aij * ul;
+                      }
+                      else if ( jg == nsub )
+                      {               
+                        f[iu] = f[iu] - aij * ur;
+                      }
+                    }
+
+                   else
+                    {
+                      if ( iu == ju )
+                      {
+                        adiag[iu] = adiag[iu] + aij;
+                      }
+                      else if ( ju < iu )
+                      {
+                        aleft[iu] = aleft[iu] + aij;
+                      }
+                      else
+                      {
+                        arite[iu] = arite[iu] + aij;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+//    }
   return;
 }
 /******************************************************************************/
@@ -475,7 +472,7 @@ void output ( double f[], int ibc, int indx[], int nsub, int nu, double ul,
 
 {
 FILE *fp, *fopen();
-  fp =fopen("originalout.txt","w+");
+  fp =fopen("out.txt","w+");
   int i;
   double u;
 
