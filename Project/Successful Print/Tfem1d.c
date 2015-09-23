@@ -2,9 +2,6 @@
 # include <stdio.h>
 # include <time.h>
 # include<sys/time.h>
-# include <omp.h>
-
-#define NUM_THREADS 4
 
 int main ( void );
 void assemble ( double adiag[], double aleft[], double arite[], double f[], 
@@ -31,8 +28,8 @@ void timestamp ( void );
 
 int main ( void )
 {
-# define NSUB 80000
-# define NL 20
+# define NSUB 100
+# define NL 1
 
 
 
@@ -74,21 +71,24 @@ int main ( void )
  
   timestamp ( );
 
-  printf ( "\n" );
-  printf ( "FEM1D\n" );
-  printf ( "  C version\n" );
-  printf ( "\n" );
-  printf ( "  Solve the two-point boundary value problem\n" );
-  printf ( "\n" );
-  printf ( "  - d/dX (P dU/dX) + Q U  =  F\n" );
-  printf ( "\n" );
-  printf ( "  on the interval [XL,XR], specifying\n" );
-  printf ( "  the value of U or U' at each end.\n" );
-  printf ( "\n" );
-  printf ( "  The interval [XL,XR] is broken into NSUB = %d subintervals\n", NSUB );
-  printf ( "  Number of basis functions per element is NL = %d\n", NL );
 
+  FILE *fp, *fopen();
+  fp =fopen("originalout.txt","w+");
+  fprintf (fp, "\n" );
+  fprintf (fp, "FEM1D\n" );
+  fprintf (fp, "  C version\n" );
+  fprintf (fp, "\n" );
+  fprintf (fp, "  Solve the two-point boundary value problem\n" );
+  fprintf (fp, "\n" );
+  fprintf (fp, "  - d/dX (P dU/dX) + Q U  =  F\n" );
+  fprintf (fp, "\n" );
+  fprintf (fp, "  on the interval [XL,XR], specifying\n" );
+  fprintf (fp, "  the value of U or U' at each end.\n" );
+  fprintf (fp, "\n" );
+  fprintf (fp, "  The interval [XL,XR] is broken into NSUB = %d subintervals\n", NSUB );
+  fprintf (fp, "  Number of basis functions per element is NL = %d\n", NL );
 
+  fclose(fp);
 /***********************************************
   Start timing 
 ************************************************/
@@ -133,17 +133,22 @@ gettimeofday(&start, NULL);
   gettimeofday(&end, NULL);
   double delta = ((end.tv_sec  - start.tv_sec) * 1000000u + end.tv_usec - start.tv_usec) / 1.e6;
   
-  printf ( "\n" );
-  printf ( "FEM1D:\n" );
-  printf ( "  Normal end of execution.\n" );
+  
   printf("time elapsed = %12.10f seconds\n",delta);
 
-  FILE *fp, *fopen();
-  fp =fopen("out.txt","a");
-  fprintf(fp,"time elapsed = %12.10f seconds\n",delta);
+  FILE *dp, *fopen();
+  dp =fopen("originalout.txt","a");
+  fprintf (dp, "\n" );
+  fprintf (dp, "FEM1D:\n" );
+  fprintf (dp, "  Normal end of execution.\n" );
+  timestamp ( );
+  fprintf(dp,"time elapsed = %12.10f seconds\n",delta);
+
+  fclose(dp);
   
   printf ( "\n" );
-  timestamp ( );
+
+  
 
   return 0;
 # undef NL
@@ -178,111 +183,117 @@ void assemble ( double adiag[], double aleft[], double arite[], double f[],
   Zero out the arrays that hold the coefficients of the matrix
   and the right hand side.
 */
-    
-#pragma omp parallel num_threads(NUM_THREADS)
+  for ( i = 0; i < nu; i++ )
+  {
+    f[i] = 0.0;
+  }
+  for ( i = 0; i < nu; i++ )
+  {
+    adiag[i] = 0.0;
+  }
+  for ( i = 0; i < nu; i++ )
+  {
+    aleft[i] = 0.0;
+  }
+  for ( i = 0; i < nu; i++ )
+  {
+    arite[i] = 0.0;
+  }
+/*
+  For interval number IE,
+*/
+  for ( ie = 0; ie < nsub; ie++ )
+  {
+    he = h[ie];
+    xleft = xn[node[0+ie*2]];
+    xrite = xn[node[1+ie*2]];
+/*
+  consider each quadrature point IQ,
+*/
+    for ( iq = 0; iq < nquad; iq++ )
     {
-       
-        #pragma omp for
-        
-          for ( i = 0; i < nu; i++ )
-          {
-            f[i] = 0.0;
-          }
-        #pragma omp for
-          for ( i = 0; i < nu; i++ )
-          {
-            adiag[i] = 0.0;
-          }
-        #pragma omp for
-          for ( i = 0; i < nu; i++ )
-          {
-            aleft[i] = 0.0;
-          }
-        #pragma omp for
-          for ( i = 0; i < nu; i++ )
-          {
-            arite[i] = 0.0;
-          }
-    }
+      xquade = xquad[ie];
+/*
+  and evaluate the integrals associated with the basis functions
+  for the left, and for the right nodes.
+*/
+      for ( il = 1; il <= nl; il++ )
+      {
+        ig = node[il-1+ie*2];
+        iu = indx[ig] - 1;
 
-//#pragma omp parallel num_threads(NUM_THREADS)
-//    {
-//        #pragma omp for
-
-          for ( ie = 0; ie < nsub; ie++ )
+        if ( 0 <= iu )
+        {
+          phi ( il, xquade, &phii, &phiix, xleft, xrite );
+          f[iu] = f[iu] + he * ff ( xquade ) * phii;
+/*
+  Take care of boundary nodes at which U' was specified.
+*/
+          if ( ig == 0 )
           {
-            he = h[ie];
-            xleft = xn[node[0+ie*2]];
-            xrite = xn[node[1+ie*2]];
-           
-            for ( iq = 0; iq < nquad; iq++ )
+            x = 0.0;
+            f[iu] = f[iu] - pp ( x ) * ul;
+          }
+          else if ( ig == nsub )
+          {
+            x = 1.0;
+            f[iu] = f[iu] + pp ( x ) * ur;
+          }
+/*
+  Evaluate the integrals that take a product of the basis
+  function times itself, or times the other basis function
+  that is nonzero in this interval.
+*/
+          for ( jl = 1; jl <= nl; jl++ )
+          {
+            jg = node[jl-1+ie*2];
+            ju = indx[jg] - 1;
+
+            phi ( jl, xquade, &phij, &phijx, xleft, xrite );
+
+            aij = he * ( pp ( xquade ) * phiix * phijx 
+                       + qq ( xquade ) * phii  * phij   );
+/*
+  If there is no variable associated with the node, then it's
+  a specified boundary value, so we multiply the coefficient
+  times the specified boundary value and subtract it from the
+  right hand side.
+*/
+            if ( ju < 0 )
             {
-              xquade = xquad[ie];
-
-              for ( il = 1; il <= nl; il++ )
+              if ( jg == 0 )
               {
-                ig = node[il-1+ie*2];
-                iu = indx[ig] - 1;
-
-                if ( 0 <= iu )
-                {
-                  phi ( il, xquade, &phii, &phiix, xleft, xrite );
-                  f[iu] = f[iu] + he * ff ( xquade ) * phii;
-
-                  if ( ig == 0 )
-                  {
-                    x = 0.0;
-                    f[iu] = f[iu] - pp ( x ) * ul;
-                  }
-                  else if ( ig == nsub )
-                  {
-                    x = 1.0;
-                    f[iu] = f[iu] + pp ( x ) * ur;
-                  }
-
-                  for ( jl = 1; jl <= nl; jl++ )
-                  {
-                    jg = node[jl-1+ie*2];
-                    ju = indx[jg] - 1;
-
-                    phi ( jl, xquade, &phij, &phijx, xleft, xrite );
-
-                    aij = he * ( pp ( xquade ) * phiix * phijx 
-                               + qq ( xquade ) * phii  * phij   );
-
-                    if ( ju < 0 )
-                    {
-                      if ( jg == 0 )
-                      {
-                        f[iu] = f[iu] - aij * ul;
-                      }
-                      else if ( jg == nsub )
-                      {               
-                        f[iu] = f[iu] - aij * ur;
-                      }
-                    }
-
-                   else
-                    {
-                      if ( iu == ju )
-                      {
-                        adiag[iu] = adiag[iu] + aij;
-                      }
-                      else if ( ju < iu )
-                      {
-                        aleft[iu] = aleft[iu] + aij;
-                      }
-                      else
-                      {
-                        arite[iu] = arite[iu] + aij;
-                      }
-                    }
-                  }
-                }
+                f[iu] = f[iu] - aij * ul;
+              }
+              else if ( jg == nsub )
+              {               
+                f[iu] = f[iu] - aij * ur;
+              }
+            }
+/*
+  Otherwise, we add the coefficient we've just computed to the
+  diagonal, or left or right entries of row IU of the matrix.
+*/
+            else
+            {
+              if ( iu == ju )
+              {
+                adiag[iu] = adiag[iu] + aij;
+              }
+              else if ( ju < iu )
+              {
+                aleft[iu] = aleft[iu] + aij;
+              }
+              else
+              {
+                arite[iu] = arite[iu] + aij;
               }
             }
           }
-//    }
+        }
+      }
+    }
+  }
   return;
 }
 /******************************************************************************/
@@ -303,55 +314,68 @@ void geometry ( double h[], int ibc, int indx[], int nl, int node[], int nsub,
   int *nu, double xl, double xn[], double xquad[], double xr )
 
 {
+
+  //Open text file for printing
+
+  FILE *fp, *fopen();
+  fp =fopen("originalout.txt","a");
+  
+
   int i;
 /*
   Set the value of XN, the locations of the nodes.
 */
-  printf ( "\n" );
-  printf ( "  Node      Location\n" );
-  printf ( "\n" );
+  fprintf (fp, "\n" );
+  fprintf (fp, "  Node      Location\n" );
+  fprintf (fp, "\n" );
+
+  //Loop G1
   for ( i = 0; i <= nsub; i++ )
   {
     xn[i]  =  ( ( double ) ( nsub - i ) * xl 
               + ( double )          i   * xr ) 
               / ( double ) ( nsub );
-    printf ( "  %8d  %14f \n", i, xn[i] );
+    fprintf (fp, "  %8d  %14f \n", i, xn[i] );
   }
 /*
   Set the lengths of each subinterval.
 */
-  printf ( "\n" );
-  printf ( "Subint    Length\n" );
-  printf ( "\n" );
+  fprintf (fp, "\n" );
+  fprintf (fp, "Subint    Length\n" );
+  fprintf (fp, "\n" );
+ //Loop G2
   for ( i = 0; i < nsub; i++ )
   {
     h[i] = xn[i+1] - xn[i];
-    printf ( "  %8d  %14f\n", i+1, h[i] );
+    fprintf (fp, "  %8d  %14f\n", i+1, h[i] );
   }
 /*
   Set the quadrature points, each of which is the midpoint
   of its subinterval.
 */
-  printf ( "\n" );
-  printf ( "Subint    Quadrature point\n" );
-  printf ( "\n" );
+  fprintf (fp, "\n" );
+  fprintf (fp, "Subint    Quadrature point\n" );
+  fprintf (fp, "\n" );
+
+ //Loop G3
   for ( i = 0; i < nsub; i++ )
   {
     xquad[i] = 0.5 * ( xn[i] + xn[i+1] );
-    printf ( "  %8d  %14f\n", i+1, xquad[i] );
+   fprintf (fp, "  %8d  %14f\n", i+1, xquad[i] );
   }
 /*
   Set the value of NODE, which records, for each interval,
   the node numbers at the left and right.
 */
-  printf ( "\n" );
-  printf ( "Subint  Left Node  Right Node\n" );
-  printf ( "\n" );
+  fprintf (fp, "\n" );
+  fprintf (fp, "Subint  Left Node  Right Node\n" );
+  fprintf (fp, "\n" );
+ //Loop G4
   for ( i = 0; i < nsub; i++ )
   {
     node[0+i*2] = i;
     node[1+i*2] = i + 1;
-    printf ( "  %8d  %8d  %8d\n", i+1, node[0+i*2], node[1+i*2] );
+    fprintf (fp, "  %8d  %8d  %8d\n", i+1, node[0+i*2], node[1+i*2] );
   }
 /*
   Starting with node 0, see if an unknown is associated with
@@ -394,15 +418,17 @@ void geometry ( double h[], int ibc, int indx[], int nl, int node[], int nsub,
     indx[i] = *nu;
   }
 
-  printf ( "\n" );
-  printf ( "  Number of unknowns NU = %8d\n", *nu );
-  printf ( "\n" );
-  printf ( "  Node  Unknown\n" );
-  printf ( "\n" );
+  fprintf (fp, "\n" );
+  fprintf (fp, "  Number of unknowns NU = %8d\n", *nu );
+  fprintf (fp, "\n" );
+  fprintf (fp, "  Node  Unknown\n" );
+  fprintf (fp, "\n" );
   for ( i = 0; i <= nsub; i++ )
   {
-    printf ( "  %8d  %8d\n", i, indx[i] );
+    fprintf (fp, "  %8d  %8d\n", i, indx[i] );
   }
+
+  fclose(fp);
 
   return;
 }
@@ -434,35 +460,40 @@ void init ( int *ibc, int *nquad, double *ul, double *ur, double *xl,
 /*
   Print out the values that have been set.
 */
-  printf ( "\n" );
-  printf ( "  The equation is to be solved for\n" );
-  printf ( "  X greater than XL = %f\n", *xl );
-  printf ( "  and less than XR = %f\n", *xr );
-  printf ( "\n" );
-  printf ( "  The boundary conditions are:\n" );
-  printf ( "\n" );
+  FILE *fp, *fopen();
+  fp =fopen("originalout.txt","a");
+  
+  fprintf (fp, "\n" );
+  fprintf (fp, "  The equation is to be solved for\n" );
+  fprintf (fp, "  X greater than XL = %f\n", *xl );
+  fprintf (fp, "  and less than XR = %f\n", *xr );
+  fprintf (fp, "\n" );
+  fprintf (fp, "  The boundary conditions are:\n" );
+  fprintf (fp, "\n" );
 
   if ( *ibc == 1 || *ibc == 3 )
   {
-    printf ( "  At X = XL, U = %f\n", *ul );
+    fprintf (fp, "  At X = XL, U = %f\n", *ul );
   }
   else
   {
-    printf ( "  At X = XL, U' = %f\n", *ul );
+    fprintf (fp, "  At X = XL, U' = %f\n", *ul );
   }
 
   if ( *ibc == 2 || *ibc == 3 )
   {
-    printf ( "  At X = XR, U = %f\n", *ur );
+    fprintf (fp, "  At X = XR, U = %f\n", *ur );
   }
   else
   {
-    printf ( "  At X = XR, U' = %f\n", *ur );
+    fprintf (fp, "  At X = XR, U' = %f\n", *ur );
   }
 
-  printf ( "\n" );
-  printf ( "  Number of quadrature points per element is %d\n", *nquad );
+  fprintf (fp, "\n" );
+  fprintf (fp, "  Number of quadrature points per element is %d\n", *nquad );
 
+  fclose(fp);
+  
   return;
 }
 /******************************************************************************/
@@ -472,7 +503,7 @@ void output ( double f[], int ibc, int indx[], int nsub, int nu, double ul,
 
 {
 FILE *fp, *fopen();
-  fp =fopen("out.txt","w+");
+  fp =fopen("originalout.txt","a");
   int i;
   double u;
 
@@ -522,11 +553,8 @@ FILE *fp, *fopen();
 
     fprintf (fp, "  %8d  %8f  %14f\n", i, xn[i], u );
   }
-  fprintf (fp, "\n" );
-  fprintf (fp, "FEM1D:\n" );
-  fprintf (fp, "  Normal end of execution.\n" );
 
-  fprintf (fp, "\n" );
+  fclose(fp);
   return;
 }
 /******************************************************************************/
@@ -575,17 +603,23 @@ void prsys ( double adiag[], double aleft[], double arite[], double f[],
 {
   int i;
 
-  printf ( "\n" );
-  printf ( "Printout of tridiagonal linear system:\n" );
-  printf ( "\n" );
-  printf ( "Equation  ALEFT  ADIAG  ARITE  RHS\n" );
-  printf ( "\n" );
+  FILE *fp, *fopen();
+  fp =fopen("originalout.txt","a");
+  
+
+  fprintf (fp, "\n" );
+  fprintf (fp, "Printout of tridiagonal linear system:\n" );
+  fprintf (fp, "\n" );
+  fprintf (fp, "Equation  ALEFT  ADIAG  ARITE  RHS\n" );
+  fprintf (fp, "\n" );
 
   for ( i = 0; i < nu; i++ )
   {
-    printf ( "  %8d  %14f  %14f  %14f  %14f\n",
+    fprintf (fp, "  %8d  %14f  %14f  %14f  %14f\n",
       i + 1, aleft[i], adiag[i], arite[i], f[i] );
   }
+
+  fclose(fp);
 
   return;
 }
@@ -653,6 +687,13 @@ void timestamp ( void )
   len = strftime ( time_buffer, TIME_SIZE, "%d %B %Y %I:%M:%S %p", tm );
 
   printf ( "%s\n", time_buffer );
+
+  FILE *fp, *fopen();
+  fp =fopen("originalout.txt","a");
+
+  fprintf (fp, "%s\n", time_buffer );
+
+  fclose(fp);
 
   return;
 # undef TIME_SIZE

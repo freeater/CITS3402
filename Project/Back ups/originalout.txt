@@ -80008,4 +80008,4 @@
 FEM1D:
   Normal end of execution.
 
-time elapsed = 2.5935960000 seconds
+time elapsed = 2.8042080000 seconds
