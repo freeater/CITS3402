@@ -173,8 +173,8 @@ int main ( void )
     differential equation is being solved.
 */
 {
-# define NSUB 100
-# define NL 1
+# define NSUB 80000
+# define NL 4
 
   double adiag[NSUB+1];
   double aleft[NSUB+1];
