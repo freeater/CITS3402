@@ -1,6 +1,7 @@
 # include <stdlib.h>
 # include <stdio.h>
 # include <time.h>
+# include <omp.h>
 # include<sys/time.h>
 
 int main ( void );
@@ -160,6 +161,7 @@ void assemble ( double adiag[], double aleft[], double arite[], double f[],
   double h[], int indx[], int nl, int node[], int nu, int nquad, int nsub, 
   double ul, double ur, double xn[], double xquad[] )
 {
+
   double aij;
   double he;
   int i;
@@ -183,6 +185,8 @@ void assemble ( double adiag[], double aleft[], double arite[], double f[],
   Zero out the arrays that hold the coefficients of the matrix
   and the right hand side.
 */
+double astart = omp_get_wtime();
+
   for ( i = 0; i < nu; i++ )
   {
     f[i] = 0.0;
@@ -199,9 +203,11 @@ void assemble ( double adiag[], double aleft[], double arite[], double f[],
   {
     arite[i] = 0.0;
   }
+
 /*
   For interval number IE,
 */
+
   for ( ie = 0; ie < nsub; ie++ )
   {
     he = h[ie];
@@ -294,7 +300,10 @@ void assemble ( double adiag[], double aleft[], double arite[], double f[],
       }
     }
   }
+  double aend = omp_get_wtime();
+  printf("assemble() block time: %.16g\n",aend - astart);
   return;
+
 }
 /******************************************************************************/
 
@@ -314,7 +323,7 @@ void geometry ( double h[], int ibc, int indx[], int nl, int node[], int nsub,
   int *nu, double xl, double xn[], double xquad[], double xr )
 
 {
-
+double gstart = omp_get_wtime();
   //Open text file for printing
 
   FILE *fp, *fopen();
@@ -330,6 +339,7 @@ void geometry ( double h[], int ibc, int indx[], int nl, int node[], int nsub,
   fprintf (fp, "\n" );
 
   //Loop G1
+  double start = omp_get_wtime();
   for ( i = 0; i <= nsub; i++ )
   {
     xn[i]  =  ( ( double ) ( nsub - i ) * xl 
@@ -356,8 +366,10 @@ void geometry ( double h[], int ibc, int indx[], int nl, int node[], int nsub,
   fprintf (fp, "\n" );
   fprintf (fp, "Subint    Quadrature point\n" );
   fprintf (fp, "\n" );
-
+double end = omp_get_wtime();
+printf("Specific block time: %.16g\n",end - start);
  //Loop G3
+
   for ( i = 0; i < nsub; i++ )
   {
     xquad[i] = 0.5 * ( xn[i] + xn[i+1] );
@@ -377,6 +389,8 @@ void geometry ( double h[], int ibc, int indx[], int nl, int node[], int nsub,
     node[1+i*2] = i + 1;
     fprintf (fp, "  %8d  %8d  %8d\n", i+1, node[0+i*2], node[1+i*2] );
   }
+
+
 /*
   Starting with node 0, see if an unknown is associated with
   the node.  If so, give it an index.
@@ -403,6 +417,9 @@ void geometry ( double h[], int ibc, int indx[], int nl, int node[], int nsub,
     *nu = *nu + 1;
     indx[i] = *nu;
   }
+
+
+
 /*
   Handle the last node.
 /*/
@@ -429,6 +446,8 @@ void geometry ( double h[], int ibc, int indx[], int nl, int node[], int nsub,
   }
 
   fclose(fp);
+double gend = omp_get_wtime();
+printf("geometry() block time: %.16g\n",gend - gstart);
 
   return;
 }
@@ -493,7 +512,7 @@ void init ( int *ibc, int *nquad, double *ul, double *ur, double *xl,
   fprintf (fp, "  Number of quadrature points per element is %d\n", *nquad );
 
   fclose(fp);
-  
+
   return;
 }
 /******************************************************************************/
@@ -502,7 +521,9 @@ void output ( double f[], int ibc, int indx[], int nsub, int nu, double ul,
   double ur, double xn[] )
 
 {
-FILE *fp, *fopen();
+  double start = omp_get_wtime();
+
+  FILE *fp, *fopen();
   fp =fopen("serialoutput.txt","a");
   int i;
   double u;
@@ -553,6 +574,8 @@ FILE *fp, *fopen();
 
     fprintf (fp, "  %8d  %8f  %14f\n", i, xn[i], u );
   }
+double end = omp_get_wtime();
+printf("ouput() block time: %.16g\n", end - start);
 
   fclose(fp);
   return;
@@ -601,6 +624,9 @@ double pp ( double x )
 void prsys ( double adiag[], double aleft[], double arite[], double f[], 
   int nu )
 {
+
+  double pstart = omp_get_wtime();
+
   int i;
 
   FILE *fp, *fopen();
@@ -620,6 +646,8 @@ void prsys ( double adiag[], double aleft[], double arite[], double f[],
   }
 
   fclose(fp);
+  double pend = omp_get_wtime();
+  printf("prsys() block time: %.16g\n",pend - pstart);
 
   return;
 }
@@ -638,6 +666,9 @@ double qq ( double x )
 void solve ( double adiag[], double aleft[], double arite[], double f[], 
   int nu )
 {
+
+  double sstart = omp_get_wtime();
+  
   int i;
 /*
   Carry out Gauss elimination on the matrix, saving information
@@ -667,6 +698,9 @@ void solve ( double adiag[], double aleft[], double arite[], double f[],
   {
     f[i] = f[i] - arite[i] * f[i+1];
   }
+
+  double send = omp_get_wtime();
+  printf("solve() block time: %.16g\n",send - sstart);
 
   return;
 }
