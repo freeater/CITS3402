@@ -249,7 +249,7 @@ void geometry ( double h[], int ibc, int indx[], int nl, int node[], int nsub,
 //Loop G1
 
 
-double start = omp_get_wtime();
+
 
 omp_set_num_threads(4);
 #pragma omp parallel 
@@ -264,23 +264,28 @@ omp_set_num_threads(4);
 
 //Print statement withing Loop G1 caused excessive slow down when parallelising
 //hence, it has been taken out of loop
-    #pragma omp single 
-    {
+    #pragma omp single    
       for ( i = 0; i <= nsub; i++ )
         {
           fprintf (fp, "  %8d  %14f \n", i, xn[i] );
         }
-      fprintf (fp, "\n" );
-      fprintf (fp, "Subint    Length\n" );
-      fprintf (fp, "\n" );
-    }
+      
+  }
 
+fprintf (fp, "\n" );
+fprintf (fp, "Subint    Length\n" );
+fprintf (fp, "\n" );
+ 
+
+omp_set_num_threads(4);
+#pragma omp parallel 
+{
 //Loop G2
-  #pragma omp for
-    for ( i = 0; i < nsub; i++ )
+  #pragma omp for 
+    for ( int i = 0; i < nsub; i++ )
     {
       h[i] = xn[i+1] - xn[i];
-      
+      //fprintf (fp, "  %8d  %14f\n", i+1, h[i] );
     }
   #pragma omp single
     {
@@ -291,8 +296,6 @@ omp_set_num_threads(4);
     }
   }
 
-double end = omp_get_wtime();
-printf("Specific block time: %.16g\n",end - start);
 
 /*  
   Set the quadrature points, each of which is the midpoint
@@ -315,7 +318,7 @@ printf("Specific block time: %.16g\n",end - start);
  */ 
 
 
-#pragma omp parallel 
+#pragma omp parallel num_threads(NUM_THREADS)
 {
  //Loop G3
   #pragma omp for
@@ -353,6 +356,7 @@ printf("Specific block time: %.16g\n",end - start);
         }
       }
   }
+
 
 
 
@@ -397,7 +401,7 @@ After parallelisation, this block was timed to be
 significant speed up.
 
 */
-
+double start = omp_get_wtime(); 
 #pragma omp parallel
   {
     //int nthrds = omp_get_num_threads; 
@@ -411,7 +415,8 @@ significant speed up.
         *nu = nsub-1;
       }
   }
-
+double end = omp_get_wtime();
+printf("Specific block time: %.16g\n",end - start);
 
 /*
   Handle the last node.
@@ -538,99 +543,114 @@ double astart = omp_get_wtime();
 /*
   For interval number IE,
 */
-
-  for ( ie = 0; ie < nsub; ie++ )
+#pragma omp parallel private(he,xleft,xrite,xquade,ig,iu,jg,ju,aij,phii,phiix) 
   {
-    he = h[ie];
-    xleft = xn[node[0+ie*2]];
-    xrite = xn[node[1+ie*2]];
-/*
-  consider each quadrature point IQ,
-*/
-    for ( iq = 0; iq < nquad; iq++ )
-    {
-      xquade = xquad[ie];
-/*
-  and evaluate the integrals associated with the basis functions
-  for the left, and for the right nodes.
-*/
-      for ( il = 1; il <= nl; il++ )
+    #pragma omp for 
+      for ( ie = 0; ie < nsub; ie++ )
       {
-        ig = node[il-1+ie*2];
-        iu = indx[ig] - 1;
-
-        if ( 0 <= iu )
+        int id = omp_get_thread_num();
+        double he = h[ie];
+        double xleft = xn[node[0+ie*2]];
+        double xrite = xn[node[1+ie*2]];
+       // printf("%f %f %f ie: %i id:%i\n",xrite,xleft,he,ie,id );
+    /*
+      consider each quadrature point IQ,
+    */
+        for ( iq = 0; iq < nquad; iq++ )
         {
-          phi ( il, xquade, &phii, &phiix, xleft, xrite );
-          f[iu] = f[iu] + he * ff ( xquade ) * phii;
-/*
-  Take care of boundary nodes at which U' was specified.
-*/
-          if ( ig == 0 )
+          double xquade = xquad[ie];
+         printf("%f ie: %i iq: %i id:%i\n", xquade,ie,iq ,id);
+    /*
+      and evaluate the integrals associated with the basis functions
+      for the left, and for the right nodes.
+    */
+          for ( il = 1; il <= nl; il++ )
           {
-            x = 0.0;
-            f[iu] = f[iu] - pp ( x ) * ul;
-          }
-          else if ( ig == nsub )
-          {
-            x = 1.0;
-            f[iu] = f[iu] + pp ( x ) * ur;
-          }
-/*
-  Evaluate the integrals that take a product of the basis
-  function times itself, or times the other basis function
-  that is nonzero in this interval.
-*/
-          for ( jl = 1; jl <= nl; jl++ )
-          {
-            jg = node[jl-1+ie*2];
-            ju = indx[jg] - 1;
+            int ig = node[il-1+ie*2];
+            int iu = indx[ig] - 1;
+       // printf("%i %i %i\n", ig,iu,id);
 
-            phi ( jl, xquade, &phij, &phijx, xleft, xrite );
+            if ( 0 <= iu )
+            {
+              phi ( il, xquade, &phii, &phiix, xleft, xrite );//////?
+              f[iu] = f[iu] + he * ff ( xquade ) * phii;//////?
+             //  printf("%f\n",f[iu] );
+    /*
+      Take care of boundary nodes at which U' was specified.
+    */
+              if ( ig == 0 )
+              {
+                int x = 0.0;
+                f[iu] = f[iu] - pp ( x ) * ul; 
+                //printf("%f\n",f[iu] );
+              }
+              else if ( ig == nsub )
+              {
+                int x = 1.0;
+                f[iu] = f[iu] + pp ( x ) * ur;
+                //printf("%f\n",f[iu] );
+              }
+    /*
+      Evaluate the integrals that take a product of the basis
+      function times itself, or times the other basis function
+      that is nonzero in this interval.
+    */
+              for ( jl = 1; jl <= nl; jl++ )
+              {
+                int jg = node[jl-1+ie*2];
 
-            aij = he * ( pp ( xquade ) * phiix * phijx 
-                       + qq ( xquade ) * phii  * phij   );
-/*
-  If there is no variable associated with the node, then it's
-  a specified boundary value, so we multiply the coefficient
-  times the specified boundary value and subtract it from the
-  right hand side.
-*/
-            if ( ju < 0 )
-            {
-              if ( jg == 0 )
-              {
-                f[iu] = f[iu] - aij * ul;
-              }
-              else if ( jg == nsub )
-              {               
-                f[iu] = f[iu] - aij * ur;
-              }
-            }
-/*
-  Otherwise, we add the coefficient we've just computed to the
-  diagonal, or left or right entries of row IU of the matrix.
-*/
-            else
-            {
-              if ( iu == ju )
-              {
-                adiag[iu] = adiag[iu] + aij;
-              }
-              else if ( ju < iu )
-              {
-                aleft[iu] = aleft[iu] + aij;
-              }
-              else
-              {
-                arite[iu] = arite[iu] + aij;
+                int ju = indx[jg] - 1;
+//printf("jg=%i ju=%i\n",jg ,ju);
+                phi ( jl, xquade, &phij, &phijx, xleft, xrite );
+
+               double aij = he * ( pp ( xquade ) * phiix * phijx 
+                           + qq ( xquade ) * phii  * phij   );
+               //printf("%f\n",aij );
+    /*
+      If there is no variable associated with the node, then it's
+      a specified boundary value, so we multiply the coefficient
+      times the specified boundary value and subtract it from the
+      right hand side.
+    */
+      //Race Conditions here
+                if ( ju < 0 )
+                {
+                  if ( jg == 0 )
+                  {
+                    f[iu] = f[iu] - aij * ul;
+                    //printf("%f\n",f[iu] );
+                  }
+                  else if ( jg == nsub )
+                  {               
+                    f[iu] = f[iu] - aij * ur;
+                    //printf("%f\n",f[iu] );
+                  }
+                }
+    /*
+      Otherwise, we add the coefficient we've just computed to the
+      diagonal, or left or right entries of row IU of the matrix.
+    */
+                else
+                {
+                  if ( iu == ju )
+                  {
+                    adiag[iu] = adiag[iu] + aij;
+                  }
+                  else if ( ju < iu )
+                  {
+                    aleft[iu] = aleft[iu] + aij;
+                  }
+                  else
+                  {
+                    arite[iu] = arite[iu] + aij;
+                  }
+                }
               }
             }
           }
         }
       }
-    }
-  }
+}
   double aend = omp_get_wtime();
   printf("assemble() block time: %.16g\n",aend - astart);
   return;

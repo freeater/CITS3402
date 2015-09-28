@@ -213,12 +213,15 @@ double astart = omp_get_wtime();
     he = h[ie];
     xleft = xn[node[0+ie*2]];
     xrite = xn[node[1+ie*2]];
-/*
+    //printf("%f %f %f %i\n",xrite,xleft,he,ie );
+/*  
   consider each quadrature point IQ,
 */
     for ( iq = 0; iq < nquad; iq++ )
     {
       xquade = xquad[ie];
+      printf("%f ie: %i iq: %i\n", xquade,ie,iq );
+      //printf("%f iq:%i %i\n", xquade,iq,ie);
 /*
   and evaluate the integrals associated with the basis functions
   for the left, and for the right nodes.
@@ -227,11 +230,12 @@ double astart = omp_get_wtime();
       {
         ig = node[il-1+ie*2];
         iu = indx[ig] - 1;
-
+ //printf("%i %i\n", ig,iu);
         if ( 0 <= iu )
         {
           phi ( il, xquade, &phii, &phiix, xleft, xrite );
           f[iu] = f[iu] + he * ff ( xquade ) * phii;
+ //         printf("%f\n",f[iu] );
 /*
   Take care of boundary nodes at which U' was specified.
 */
@@ -239,11 +243,13 @@ double astart = omp_get_wtime();
           {
             x = 0.0;
             f[iu] = f[iu] - pp ( x ) * ul;
+            printf("%f\n",f[iu] );
           }
           else if ( ig == nsub )
           {
             x = 1.0;
             f[iu] = f[iu] + pp ( x ) * ur;
+ //           printf("%f\n",f[iu] );
           }
 /*
   Evaluate the integrals that take a product of the basis
@@ -254,11 +260,12 @@ double astart = omp_get_wtime();
           {
             jg = node[jl-1+ie*2];
             ju = indx[jg] - 1;
-
+            //printf("jg=%i ju=%i\n",jg ,ju);
             phi ( jl, xquade, &phij, &phijx, xleft, xrite );
 
             aij = he * ( pp ( xquade ) * phiix * phijx 
                        + qq ( xquade ) * phii  * phij   );
+  //          printf("%f\n",aij );
 /*
   If there is no variable associated with the node, then it's
   a specified boundary value, so we multiply the coefficient
@@ -270,10 +277,12 @@ double astart = omp_get_wtime();
               if ( jg == 0 )
               {
                 f[iu] = f[iu] - aij * ul;
+                //printf("%f\n",f[iu] );
               }
               else if ( jg == nsub )
               {               
                 f[iu] = f[iu] - aij * ur;
+               // printf("%f\n",f[iu] );
               }
             }
 /*
@@ -339,7 +348,7 @@ double gstart = omp_get_wtime();
   fprintf (fp, "\n" );
 
   //Loop G1
-  double start = omp_get_wtime();
+
   for ( i = 0; i <= nsub; i++ )
   {
     xn[i]  =  ( ( double ) ( nsub - i ) * xl 
@@ -347,18 +356,24 @@ double gstart = omp_get_wtime();
               / ( double ) ( nsub );
     fprintf (fp, "  %8d  %14f \n", i, xn[i] );
   }
+
+
 /*
   Set the lengths of each subinterval.
 */
   fprintf (fp, "\n" );
   fprintf (fp, "Subint    Length\n" );
   fprintf (fp, "\n" );
+
+
  //Loop G2
   for ( i = 0; i < nsub; i++ )
   {
     h[i] = xn[i+1] - xn[i];
     fprintf (fp, "  %8d  %14f\n", i+1, h[i] );
   }
+
+
 /*
   Set the quadrature points, each of which is the midpoint
   of its subinterval.
@@ -366,8 +381,7 @@ double gstart = omp_get_wtime();
   fprintf (fp, "\n" );
   fprintf (fp, "Subint    Quadrature point\n" );
   fprintf (fp, "\n" );
-double end = omp_get_wtime();
-printf("Specific block time: %.16g\n",end - start);
+
  //Loop G3
 
   for ( i = 0; i < nsub; i++ )
@@ -399,6 +413,9 @@ printf("Specific block time: %.16g\n",end - start);
 /*
   Handle first node.
 */
+
+double start = omp_get_wtime();
+
   i = 0;
   if ( ibc == 1 || ibc == 3 )
   {
@@ -418,7 +435,8 @@ printf("Specific block time: %.16g\n",end - start);
     indx[i] = *nu;
   }
 
-
+double end = omp_get_wtime();
+printf("Specific block time: %.16g\n",end - start);
 
 /*
   Handle the last node.
